@@ -1,11 +1,10 @@
-# Ignorer l’index Chroma
-chroma_index/
 
-# Ignorer les fichiers temporaires Python
+
+
+
+
+venv/
+chroma_index/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-
-# Ignorer les fichiers d’historique local
-history.json
+.vscode/
