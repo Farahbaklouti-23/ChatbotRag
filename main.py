@@ -2,30 +2,24 @@
 import streamlit as st          # Framework pour créer des applications web interactives
 import datetime                 # Pour gérer les dates et heures
 import os                       # Pour interagir avec le système de fichiers
-from rag import initialize_rag_system, generate_rag_response  # Fonctions personnalisées pour le RAG (Retrieval-Augmented Generation)
-from utils import load_history, save_history, speech_to_text       # Fonctions utilitaires pour l'historique et la transcription audio
-from langchain.schema import HumanMessage, AIMessage              # Classes pour représenter les messages dans la conversation
+from rag import initialize_rag_system, generate_rag_response  # Fonctions personnalisées pour le RAG
+from utils import load_history, save_history                  # Fonctions utilitaires pour l'historique
+from langchain.schema import HumanMessage, AIMessage          # Classes pour représenter les messages
 
 # === Configuration des chemins des fichiers ===
-CHROMA_DIR = "chroma_index"        # Répertoire où l'index Chroma est stocké
-JSON_FILE = "fichierfinal_nettoye.json"  # Fichier JSON contenant les données sources
-HISTORY_FILE = "history.json"      # Fichier pour sauvegarder l'historique des conversations
-CSS_FILE = "style.css"             # Fichier CSS pour styliser l'interface
+CHROMA_DIR = "chroma_index"
+JSON_FILE = "fichierfinal_nettoye.json"
+HISTORY_FILE = "history.json"
+CSS_FILE = "style.css"
 
 # === Fonction pour charger le CSS ===
 def load_css():
-    # Ouvre le fichier CSS et retourne son contenu
     with open(CSS_FILE) as f:
         return f.read()
-
-# Injection du CSS dans Streamlit pour styliser l'application
 st.markdown(f"<style>{load_css()}</style>", unsafe_allow_html=True)
 
 # === Configuration générale de la page Streamlit ===
-st.set_page_config(
-    page_title="Agent RAG LangChain - PEP",  # Titre de la page
-    layout="wide"                            # Largeur de la page étendue
-)
+st.set_page_config(page_title="Agent RAG LangChain - PEP", layout="wide")
 
 # === Affichage du titre principal avec icône SVG ===
 st.markdown("""
@@ -37,48 +31,27 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# === Initialisation des variables d'état de session Streamlit ===
+# === Initialisation des variables d'état de session ===
 def init_session_state():
-    # Historique des conversations précédentes
     if "history" not in st.session_state:
         st.session_state.history = load_history(HISTORY_FILE)
-        
-    # Conversation en cours (messages utilisateurs et AI)
     if "current_conversation" not in st.session_state:
         st.session_state.current_conversation = []
-
-    # Indicateur de traitement en cours
     if "processing" not in st.session_state:
         st.session_state.processing = False
-
-    # Texte transcrit depuis l'audio
-    if "transcribed_text" not in st.session_state:
-        st.session_state.transcribed_text = ""
-
-    # Compteur pour réinitialiser les inputs
     if "input_reset_counter" not in st.session_state:
         st.session_state.input_reset_counter = 0
-
-    # Indicateur si l'utilisateur enregistre de l'audio
-    if "recording" not in st.session_state:
-        st.session_state.recording = False
-
-    # Derniers documents récupérés par le RAG
     if "last_retrieved" not in st.session_state:
         st.session_state.last_retrieved = []
 
 # === Barre latérale avec l'historique des conversations ===
 def render_sidebar():
     with st.sidebar:
-        # Affichage du logo
         try:
             st.image("excellianouv.png", width=250)
         except:
             st.info("Logo non trouvé")
-        
         st.markdown("## Historique récent")
-        
-        # Affichage des 10 dernières questions/réponses
         if st.session_state.history:
             for i, (q, a) in enumerate(reversed(st.session_state.history[-10:])):
                 with st.container():
@@ -88,14 +61,11 @@ def render_sidebar():
                                 f'</div>', unsafe_allow_html=True)
         else:
             st.info("Aucune question posée.")
-
         st.markdown("---")
-        # Bouton pour réinitialiser l'historique
         if st.button("🗑️ Réinitialiser l'historique", use_container_width=True):
             st.session_state.history = []
             st.session_state.current_conversation = []
             st.session_state.processing = False
-            st.session_state.transcribed_text = ""
             st.session_state.input_reset_counter += 1
             st.session_state.last_retrieved = []
             if os.path.exists(HISTORY_FILE):
@@ -105,8 +75,6 @@ def render_sidebar():
 # === Interface principale du chat ===
 def render_chat_interface():
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
-    
-    # En-tête de la conversation
     st.markdown("""
     <div class="chat-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -115,37 +83,19 @@ def render_chat_interface():
         <h2>Conversation en cours</h2>
     </div>
     """, unsafe_allow_html=True)
-
-    # Affichage des messages de la conversation
     st.markdown('<div class="chat-messages">', unsafe_allow_html=True)
     for role, message, timestamp in st.session_state.current_conversation:
         if role == "user":
-            st.markdown(f"""
-            <div class="message user-message">
-                {message}
-                <div class="timestamp">{timestamp}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="message user-message">{message}<div class="timestamp">{timestamp}</div></div>', unsafe_allow_html=True)
         elif role == "ai":
-            st.markdown(f"""
-            <div class="message ai-message">
-                {message.replace(chr(10), '<br>')}
-                <div class="timestamp">{timestamp}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # Indicateur "en cours de rédaction" si AI répond
+            st.markdown(f'<div class="message ai-message">{message.replace(chr(10), "<br>")}<div class="timestamp">{timestamp}</div></div>', unsafe_allow_html=True)
     if st.session_state.processing:
         st.markdown("""
         <div class="typing-indicator">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
+            <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
             <span>Le chatbot rédige sa réponse...</span>
         </div>
         """, unsafe_allow_html=True)
-
-    # Section de débogage pour les documents source récupérés
     if st.session_state.last_retrieved:
         with st.expander(" Documents source récupérés (Débogage)"):
             st.info(f"{len(st.session_state.last_retrieved)} documents pertinents trouvés")
@@ -153,40 +103,21 @@ def render_chat_interface():
                 st.markdown(f"**Document {i+1}**")
                 st.code(doc.page_content)
                 st.divider()
-
     st.markdown('<div style="flex-grow: 1;"></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Zone d'entrée de texte et boutons
+    # Zone d'entrée de texte et bouton Rechercher
     st.markdown('<div class="input-container">', unsafe_allow_html=True)
     with st.form(key=f'message_form_{st.session_state.input_reset_counter}'):
-        cols = st.columns([7, 2.5, 2.5])
+        cols = st.columns([8, 2])
         with cols[0]:
             current_key = f"input_prompt_{st.session_state.input_reset_counter}"
-            default_value = st.session_state.transcribed_text if st.session_state.transcribed_text else ""
-            user_input = st.text_input(
-                "Message",
-                key=current_key,
-                value=default_value,
-                placeholder="Posez votre question...",
-                label_visibility="collapsed"
-            )
+            user_input = st.text_input("Message", key=current_key, placeholder="Posez votre question...", label_visibility="collapsed")
         with cols[1]:
-            submit_button = st.form_submit_button(
-                " Rechercher", 
-                use_container_width=True,
-                type="primary"
-            )
-        with cols[2]:
-            voice_button = st.form_submit_button(
-                " Audio", 
-                use_container_width=True,
-                type="primary"
-            )
+            submit_button = st.form_submit_button(" Rechercher", use_container_width=True, type="primary")
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    return submit_button, voice_button
+    return submit_button
 
 # === Logique pour traiter la question utilisateur ===
 def process_question():
@@ -194,30 +125,21 @@ def process_question():
     if not prompt:
         st.warning("Veuillez saisir une question")
         return False
-
-    # Ajouter le message utilisateur à la conversation
     user_timestamp = datetime.datetime.now().strftime("%H:%M")
     st.session_state.current_conversation.append(("user", prompt, user_timestamp))
     st.session_state.processing = True
     st.session_state.input_reset_counter += 1
-    st.session_state.transcribed_text = ""
     st.session_state.last_retrieved = []
     return True
 
 # === Logique pour générer la réponse via le RAG ===
 def handle_response(rag_chain):
     prompt = st.session_state.current_conversation[-1][1]
-
-    # Conversion de l'historique en format HumanMessage / AIMessage
     chat_history = []
     for q, a in st.session_state.history:
         chat_history.append(HumanMessage(content=q))
         chat_history.append(AIMessage(content=a))
-    
-    # Génération de la réponse et récupération des documents
     response, source_docs = generate_rag_response(rag_chain, prompt, chat_history)
-    
-    # Ajouter la réponse AI à la conversation
     ai_timestamp = datetime.datetime.now().strftime("%H:%M")
     st.session_state.current_conversation.append(("ai", response, ai_timestamp))
     st.session_state.history.append((prompt, response))
@@ -227,23 +149,13 @@ def handle_response(rag_chain):
 
 # === Point d'entrée principal de l'application ===
 def main():
-    init_session_state()        # Initialiser l'état de session
-    render_sidebar()            # Afficher la barre latérale avec historique
-    
-    # Initialiser le système RAG
+    init_session_state()
+    render_sidebar()
     rag_chain = initialize_rag_system(CHROMA_DIR, JSON_FILE)
     if not rag_chain:
         st.error("Erreur d'initialisation du système RAG")
         return
-    
-    # Afficher l'interface du chat
-    submit_button, voice_button = render_chat_interface()
-    
-    # Gestion des boutons
-    if voice_button:
-        st.session_state.transcribed_text = speech_to_text()
-        st.rerun()
-    
+    submit_button = render_chat_interface()
     if submit_button:
         if process_question():
             handle_response(rag_chain)

@@ -7,11 +7,12 @@ import json  # Pour lire les fichiers JSON contenant les données
 import os    # Pour vérifier l'existence de fichiers et dossiers
 
 # --- Imports mis à jour pour LangChain sans dépréciation ---
-from langchain_huggingface import HuggingFaceEmbeddings  # Embeddings à partir du texte
-from langchain_chroma import Chroma                        # Index vectoriel Chroma
-from langchain.chains import ConversationalRetrievalChain  # Chaîne RAG conversationnelle
-from langchain_ollama import ChatOllama                    # LLM Ollama (Mistral)
-from langchain.prompts import PromptTemplate               # Template de prompt personnalisé
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chains import ConversationalRetrievalChain
+from langchain_ollama import ChatOllama
+from langchain.prompts import PromptTemplate
+
 
 # ===============================
 # Configuration des modèles et paramètres

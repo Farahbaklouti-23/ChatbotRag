@@ -102,5 +102,25 @@
   [
     "qui est PHICHAI Chunhawachira ?  ",
     " \"Désolé, je ne peux répondre qu'aux questions concernant des personnalités politiques. Le nom 'Phichai Chunhawachira' n'est pas disponible dans la base.\""
+  ],
+  [
+    "salut",
+    "Erreur lors du traitement: model requires more system memory (3.6 GiB) than is available (3.4 GiB) (status code: 500)"
+  ],
+  [
+    "hey",
+    "Erreur lors du traitement: llama runner process has terminated: error loading model: unable to allocate CUDA0 buffer (status code: 500)"
+  ],
+  [
+    "bonjour",
+    "Erreur lors du traitement: llama runner process has terminated: exit status 2 (status code: 500)"
+  ],
+  [
+    "hello  ",
+    " \"Désolé, je ne peux répondre qu'aux questions concernant des personnalités politiques. Le nom 'Phichai Chunhawachira' n'est pas disponible dans la base.\""
+  ],
+  [
+    "Katsuyuki Kawai",
+    " Nom: Katsuyuki Kawai\nNaissance: Non spécifié\nGenre: Non spécifié\nPays: jp\nRégion: Non spécifié\nPostes: Non spécifié"
   ]
 ]

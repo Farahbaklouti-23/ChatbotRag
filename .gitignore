@@ -8,3 +8,6 @@ chroma_index/
 __pycache__/
 *.pyc
 .vscode/
+chroma_index/
+venv/
+__pycache__/
