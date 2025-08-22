@@ -1,4 +1,8 @@
-# Importation des bibliothèques nécessaires
+# ===============================
+# main.py - Application Streamlit avec RAG
+# ===============================
+
+# --- Importation des bibliothèques nécessaires ---
 import streamlit as st          # Framework pour créer des applications web interactives
 import datetime                 # Pour gérer les dates et heures
 import os                       # Pour interagir avec le système de fichiers
@@ -6,22 +10,27 @@ from rag import initialize_rag_system, generate_rag_response  # Fonctions person
 from utils import load_history, save_history                  # Fonctions utilitaires pour l'historique
 from langchain.schema import HumanMessage, AIMessage          # Classes pour représenter les messages
 
-# === Configuration des chemins des fichiers ===
+
+# --- Configuration des chemins des fichiers ---
 CHROMA_DIR = "chroma_index"
 JSON_FILE = "fichierfinal_nettoye.json"
 HISTORY_FILE = "history.json"
 CSS_FILE = "style.css"
 
-# === Fonction pour charger le CSS ===
+
+# --- Chargement du CSS ---
 def load_css():
-    with open(CSS_FILE) as f:
-        return f.read()
+    if os.path.exists(CSS_FILE):
+        with open(CSS_FILE, encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
+st.set_page_config(page_title="Agent RAG LangChain - PEP", layout="wide")
 st.markdown(f"<style>{load_css()}</style>", unsafe_allow_html=True)
 
-# === Configuration générale de la page Streamlit ===
-st.set_page_config(page_title="Agent RAG LangChain - PEP", layout="wide")
 
-# === Affichage du titre principal avec icône SVG ===
+# --- Affichage du titre principal avec icône SVG ---
 st.markdown("""
 <div class="main-title">
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -31,7 +40,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# === Initialisation des variables d'état de session ===
+
+# --- Initialisation de l'état de session ---
 def init_session_state():
     if "history" not in st.session_state:
         st.session_state.history = load_history(HISTORY_FILE)
@@ -44,23 +54,28 @@ def init_session_state():
     if "last_retrieved" not in st.session_state:
         st.session_state.last_retrieved = []
 
-# === Barre latérale avec l'historique des conversations ===
+
+# --- Barre latérale (historique + reset) ---
 def render_sidebar():
     with st.sidebar:
         try:
             st.image("excellianouv.png", width=250)
         except:
             st.info("Logo non trouvé")
+
         st.markdown("## Historique récent")
         if st.session_state.history:
             for i, (q, a) in enumerate(reversed(st.session_state.history[-10:])):
-                with st.container():
-                    st.markdown(f'<div class="history-item" onclick=\'document.getElementById("input_prompt_{st.session_state.input_reset_counter}").value = "{q[:50]}";\'>' 
-                                f'<strong>{q[:45]}{"..." if len(q) > 45 else ""}</strong>'
-                                f'<div style="font-size:0.8em;color:#6B7280;margin-top:4px;">{a[:60]}{"..." if len(a) > 60 else ""}</div>'
-                                f'</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="history-item" '
+                    f'onclick=\'document.getElementById("input_prompt_{st.session_state.input_reset_counter}").value = "{q[:50]}";\'>'
+                    f'<strong>{q[:45]}{"..." if len(q) > 45 else ""}</strong>'
+                    f'<div style="font-size:0.8em;color:#6B7280;margin-top:4px;">{a[:60]}{"..." if len(a) > 60 else ""}</div>'
+                    f'</div>', unsafe_allow_html=True
+                )
         else:
             st.info("Aucune question posée.")
+
         st.markdown("---")
         if st.button("🗑️ Réinitialiser l'historique", use_container_width=True):
             st.session_state.history = []
@@ -72,9 +87,12 @@ def render_sidebar():
                 os.remove(HISTORY_FILE)
             st.rerun()
 
-# === Interface principale du chat ===
+
+# --- Interface principale du chat ---
 def render_chat_interface():
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
+
+    # En-tête de chat
     st.markdown("""
     <div class="chat-header">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -83,12 +101,16 @@ def render_chat_interface():
         <h2>Conversation en cours</h2>
     </div>
     """, unsafe_allow_html=True)
+
+    # Messages affichés
     st.markdown('<div class="chat-messages">', unsafe_allow_html=True)
     for role, message, timestamp in st.session_state.current_conversation:
         if role == "user":
             st.markdown(f'<div class="message user-message">{message}<div class="timestamp">{timestamp}</div></div>', unsafe_allow_html=True)
         elif role == "ai":
             st.markdown(f'<div class="message ai-message">{message.replace(chr(10), "<br>")}<div class="timestamp">{timestamp}</div></div>', unsafe_allow_html=True)
+
+    # Indicateur de saisie
     if st.session_state.processing:
         st.markdown("""
         <div class="typing-indicator">
@@ -96,50 +118,59 @@ def render_chat_interface():
             <span>Le chatbot rédige sa réponse...</span>
         </div>
         """, unsafe_allow_html=True)
+
+    # Sources récupérées
     if st.session_state.last_retrieved:
-        with st.expander(" Documents source récupérés (Débogage)"):
+        with st.expander("📂 Documents source récupérés (Débogage)"):
             st.info(f"{len(st.session_state.last_retrieved)} documents pertinents trouvés")
             for i, doc in enumerate(st.session_state.last_retrieved):
                 st.markdown(f"**Document {i+1}**")
                 st.code(doc.page_content)
                 st.divider()
-    st.markdown('<div style="flex-grow: 1;"></div>', unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Zone d'entrée de texte et bouton Rechercher
-    st.markdown('<div class="input-container">', unsafe_allow_html=True)
+    # Zone d'entrée + bouton
     with st.form(key=f'message_form_{st.session_state.input_reset_counter}'):
         cols = st.columns([8, 2])
         with cols[0]:
             current_key = f"input_prompt_{st.session_state.input_reset_counter}"
-            user_input = st.text_input("Message", key=current_key, placeholder="Posez votre question...", label_visibility="collapsed")
+            st.text_input("Message", key=current_key, placeholder="Posez votre question...", label_visibility="collapsed")
         with cols[1]:
             submit_button = st.form_submit_button(" Rechercher", use_container_width=True, type="primary")
-    st.markdown('</div>', unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
     return submit_button
 
-# === Logique pour traiter la question utilisateur ===
+
+# --- Logique : traitement de la question ---
 def process_question():
     prompt = st.session_state.get(f"input_prompt_{st.session_state.input_reset_counter}", "")
-    if not prompt:
+    if not prompt.strip():
         st.warning("Veuillez saisir une question")
         return False
+
     user_timestamp = datetime.datetime.now().strftime("%H:%M")
-    st.session_state.current_conversation.append(("user", prompt, user_timestamp))
+    st.session_state.current_conversation.append(("user", prompt.strip(), user_timestamp))
     st.session_state.processing = True
     st.session_state.input_reset_counter += 1
     st.session_state.last_retrieved = []
     return True
 
-# === Logique pour générer la réponse via le RAG ===
+
+# --- Logique : génération de la réponse ---
 def handle_response(rag_chain):
     prompt = st.session_state.current_conversation[-1][1]
     chat_history = []
     for q, a in st.session_state.history:
         chat_history.append(HumanMessage(content=q))
         chat_history.append(AIMessage(content=a))
-    response, source_docs = generate_rag_response(rag_chain, prompt, chat_history)
+
+    try:
+        response, source_docs = generate_rag_response(rag_chain, prompt, chat_history)
+    except Exception as e:
+        response, source_docs = f"⚠️ Erreur lors de la génération de la réponse : {e}", []
+
     ai_timestamp = datetime.datetime.now().strftime("%H:%M")
     st.session_state.current_conversation.append(("ai", response, ai_timestamp))
     st.session_state.history.append((prompt, response))
@@ -147,20 +178,26 @@ def handle_response(rag_chain):
     st.session_state.last_retrieved = source_docs
     st.session_state.processing = False
 
-# === Point d'entrée principal de l'application ===
+
+# --- Point d'entrée principal ---
 def main():
     init_session_state()
     render_sidebar()
-    rag_chain = initialize_rag_system(CHROMA_DIR, JSON_FILE)
+
+    # Initialisation du RAG
+    rag_chain = initialize_rag_system()
     if not rag_chain:
-        st.error("Erreur d'initialisation du système RAG")
+        st.error("❌ Erreur d'initialisation du système RAG (vérifiez Chroma et le JSON)")
         return
+
+    # Interface + interaction
     submit_button = render_chat_interface()
     if submit_button:
         if process_question():
             handle_response(rag_chain)
             st.rerun()
 
-# === Exécution du programme ===
+
+# --- Exécution du programme ---
 if __name__ == "__main__":
     main()

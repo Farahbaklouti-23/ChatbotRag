@@ -1,29 +1,33 @@
 # ===============================
-# rag.py - Système RAG pour personnalités politiques
+# rag.py - Système RAG avec Chroma depuis Hugging Face Hub
 # ===============================
 
-# --- Imports nécessaires ---
-import json  # Pour lire les fichiers JSON contenant les données
-import os    # Pour vérifier l'existence de fichiers et dossiers
+import os
+import shutil
+import zipfile
+from huggingface_hub import hf_hub_download
 
-# --- Imports mis à jour pour LangChain sans dépréciation ---
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.chains import ConversationalRetrievalChain
+# --- Imports LangChain / Ollama ---
 from langchain_ollama import ChatOllama
 from langchain.prompts import PromptTemplate
-
+from langchain.vectorstores import Chroma
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.chains import ConversationalRetrievalChain
 
 # ===============================
 # Configuration des modèles et paramètres
 # ===============================
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Modèle utilisé pour les embeddings
-OLLAMA_MODEL = "mistral"              # Modèle LLM Ollama
-TEMPERATURE = 0.1                      # Température pour contrôler la créativité du LLM
-TOP_K = 10                             # Nombre de documents récupérés pour chaque question
+HF_REPO_ID = "Farahbaklouti-2002/political-rag-index"  # ⚠️ à remplacer par ton repo Hugging Face
+HF_FILENAME = "chroma.zip"            # Le fichier que tu as uploadé
+CHROMA_DIR = "chroma_index"           # Répertoire local où sera extrait l’index
+
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+OLLAMA_MODEL = "mistral"
+TEMPERATURE = 0.1
+TOP_K = 10
 
 # ===============================
-# Prompt personnalisé pour le LLM
+# Prompt personnalisé
 # ===============================
 CUSTOM_PROMPT_TEMPLATE = """
 Tu es un expert spécialisé dans les personnalités politiques mondiales.  
@@ -66,109 +70,57 @@ Réponse:
 """
 
 # ===============================
-# Fonction principale pour initialiser le système RAG
+# Téléchargement & extraction de l’index Chroma
 # ===============================
-def initialize_rag_system(chroma_dir, json_file):
+def download_and_extract_chroma(repo_id=HF_REPO_ID, filename=HF_FILENAME, local_dir=CHROMA_DIR):
     """
-    Initialise et retourne la chaîne RAG complète.
-    1. Charge le modèle d'embeddings
-    2. Charge et formate les textes depuis le fichier JSON
-    3. Crée ou charge l'index Chroma
-    4. Charge le LLM Ollama
-    5. Retourne la chaîne RAG prête à être utilisée
+    Télécharge chroma.zip depuis Hugging Face Hub et l'extrait dans local_dir.
     """
-    embeddings = load_embeddings()  # Chargement du modèle d'embeddings
-    texts = load_texts(json_file)  # Chargement des textes
-    chroma_index = build_or_load_chroma(texts, embeddings, chroma_dir)  # Création ou chargement de l'index
-    llm = load_llm()  # Chargement du LLM
+    if not os.path.exists(local_dir) or not os.listdir(local_dir):
+        print("📥 Téléchargement de l'index Chroma depuis Hugging Face...")
+        downloaded_file = hf_hub_download(repo_id=repo_id, filename=filename)
 
-    if not chroma_index or not llm:
-        return None  # Retourne None si un composant échoue
+        # Nettoyer l'ancien dossier si besoin
+        if os.path.exists(local_dir):
+            shutil.rmtree(local_dir)
 
-    return create_rag_chain(llm, chroma_index)  # Création de la chaîne RAG
+        os.makedirs(local_dir, exist_ok=True)
 
-# ===============================
-# Fonction pour charger les embeddings
-# ===============================
-def load_embeddings():
-    """
-    Crée et retourne un objet HuggingFaceEmbeddings
-    qui va transformer le texte en vecteurs pour l'indexation.
-    """
-    return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        # Décompression
+        with zipfile.ZipFile(downloaded_file, "r") as zip_ref:
+            zip_ref.extractall(local_dir)
+
+    return local_dir
 
 # ===============================
-# Fonction pour charger et formater les textes depuis le JSON
+# Initialisation du système RAG
 # ===============================
-def load_texts(json_file):
+def initialize_rag_system():
     """
-    Lit le fichier JSON et retourne une liste de textes formatés.
-    Chaque ligne du fichier JSON correspond à une personnalité.
+    Initialise la chaîne RAG en utilisant l’index Chroma hébergé sur Hugging Face Hub.
     """
-    texts = []
-    if not os.path.exists(json_file):
-        return texts  # Retourne une liste vide si le fichier n'existe pas
+    # 1. Charger embeddings
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
-    with open(json_file, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                entry = json.loads(line)
-                props = entry.get("properties", {})
+    # 2. Télécharger / extraire Chroma index
+    local_chroma_dir = download_and_extract_chroma()
 
-                # Extraction des informations principales
-                name = entry.get("caption_latin", "Inconnu")
-                birth = props.get("birthDate", ["Non spécifié"])[0] if props.get("birthDate") else "Non spécifié"
-                positions = "; ".join(props.get("position", []))
-                country = " ".join(props.get("country", []))
-                sub_area = " ".join(props.get("subnationalArea", []))
-                gender = " ".join(props.get("gender", []))
+    # 3. Charger Chroma
+    chroma_index = Chroma(
+        persist_directory=local_chroma_dir,
+        embedding_function=embeddings
+    )
 
-                # Construction d'une chaîne texte formatée
-                text_content = f"""
-                Nom: {name}
-                Naissance: {birth}
-                Genre: {gender}
-                Pays: {country}
-                Région: {sub_area}
-                Postes: {positions}
-                """
-                texts.append(text_content)
-            except:
-                continue  # Ignore les lignes mal formées
-    return texts
+    # 4. Charger LLM
+    llm = ChatOllama(model=OLLAMA_MODEL, temperature=TEMPERATURE)
+
+    # 5. Construire chaîne RAG
+    return create_rag_chain(llm, chroma_index)
 
 # ===============================
-# Fonction pour créer ou charger l'index Chroma
-# ===============================
-def build_or_load_chroma(texts, embeddings, chroma_dir):
-    """
-    Crée un nouvel index Chroma si aucun n'existe.
-    Sinon, charge l'index existant depuis le dossier.
-    """
-    if os.path.exists(chroma_dir) and os.listdir(chroma_dir):
-        return Chroma(persist_directory=chroma_dir, embedding_function=embeddings)
-    elif texts:
-        return Chroma.from_texts(texts, embeddings, persist_directory=chroma_dir)
-    return None
-
-# ===============================
-# Fonction pour charger le LLM Ollama
-# ===============================
-def load_llm():
-    """
-    Initialise le modèle Ollama Mistral avec la température spécifiée.
-    """
-    return ChatOllama(model=OLLAMA_MODEL, temperature=TEMPERATURE)
-
-# ===============================
-# Fonction pour créer la chaîne RAG conversationnelle
+# Chaîne RAG conversationnelle
 # ===============================
 def create_rag_chain(llm, chroma_index):
-    """
-    Crée une chaîne RAG:
-    1. Récupère les documents pertinents via Chroma
-    2. Interroge le LLM avec un PromptTemplate personnalisé
-    """
     QA_PROMPT = PromptTemplate(
         template=CUSTOM_PROMPT_TEMPLATE,
         input_variables=["context", "question"]
@@ -177,20 +129,14 @@ def create_rag_chain(llm, chroma_index):
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=chroma_index.as_retriever(search_kwargs={"k": TOP_K}),
-        return_source_documents=False,  # Pas besoin des documents sources pour l'affichage
+        return_source_documents=True,  # garde les sources si besoin debug
         combine_docs_chain_kwargs={"prompt": QA_PROMPT}
     )
 
 # ===============================
-# Fonction pour générer une réponse RAG
+# Génération de réponse
 # ===============================
 def generate_rag_response(rag_chain, prompt, chat_history):
-    """
-    Génère une réponse RAG pour une question donnée.
-    - prompt: question de l'utilisateur
-    - chat_history: historique de la conversation
-    Retourne: (réponse texte, documents sources)
-    """
     try:
         result = rag_chain.invoke({
             "question": prompt,
